@@ -1,0 +1,111 @@
+/** 
+ * 
+ */
+package fr.utbm.ai51.holonicsearch
+
+import io.sarl.api.core.DefaultContextInteractions
+import io.sarl.api.core.Initialize
+import io.sarl.api.core.InnerContextAccess
+import io.sarl.api.core.Lifecycle
+import io.sarl.api.core.Logging
+import io.sarl.api.core.ParticipantJoined
+import io.sarl.api.core.ParticipantLeft
+import io.sarl.api.core.Schedules
+import java.io.File
+import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
+
+/** 
+ * 
+ */
+agent SearchAgent {
+	uses Logging, Lifecycle, Schedules, InnerContextAccess, DefaultContextInteractions
+
+	var parentID : UUID
+
+	var agentPath : String
+	var searchPredicate : String
+	var childUIDs : ConcurrentHashMap<UUID, String> = new ConcurrentHashMap<UUID, String>
+
+	on Initialize {
+		// Event trigger before the agent begins to live or to be used.
+		// You should put all the initialization statements in this block of code.
+		info("Search agent was started.")
+	}
+
+	on SearchRequest {
+		if (parentID == null) {
+			parentID = occurrence.source.ID
+			agentPath = occurrence.path
+			searchPredicate = occurrence.predicate
+
+		}
+		info("Agent " + agentPath + " received search request")
+		SearchFileInDir()
+
+	}
+
+	def SearchFileInDir() {
+		// creation of the file which is represented by the agent
+		var agentDirFile = new File(agentPath)
+
+		// list of the files contained in the directory
+		var listFilesInDir : File[] = agentDirFile.listFiles()
+
+		for (file : listFilesInDir) {
+			//info("file path = " + file.absolutePath)
+			if (file.isDirectory()) {
+				val aid = UUID::randomUUID
+				// info("Create the child at " + file.absolutePath)
+				childUIDs.put(aid, file.absolutePath) // import to add before spawning, because spawning is done in a subthread
+				spawnInContextWithID(SearchAgent, aid, innerContext)
+			} else if (file.getName().contains(searchPredicate)) {
+				//info("File found at : " + file.getName())
+				emit(new FileFound(file.absolutePath))[it.ID == parentID]
+			}
+		}
+
+		if (childUIDs.size <= 0) {
+			// Search finished and no child to wait
+			in(1000) [
+				info("Search finished in file :" + agentPath + " agent kill himself")
+				killMe
+			]
+
+		}
+
+	}
+
+	on ParticipantJoined [occurrence.spaceID.contextID == innerContext.ID] {
+		// info("Member " + occurrence.source.ID + " joined ")
+		if (childUIDs.containsKey(occurrence.source.ID)) {
+			innerContext.defaultSpace.emit(this.ID,
+				new SearchRequest(childUIDs.get(occurrence.source.ID), searchPredicate)) [
+				it.ID == occurrence.source.ID
+			]
+		}
+	}
+
+	on FileFound {
+		emit(new FileFound(occurrence.filePath))[it.ID == parentID]
+	}
+
+	on ParticipantLeft [occurrence.spaceID.contextID == innerContext.ID] {
+		// Could also worked with
+		// on ParticipantLeft [occurrence.spaceID.contextID == innerContext.ID] { // Being sure the corresponding event comes from my internal context
+		// Event-based holarchy destruction
+		// info(occurrence.source.ID + " left ")
+		var childID = occurrence.source.ID // use the source of the event if you switch to Participantleft
+		if (childUIDs.containsKey(childID)) {
+			childUIDs.remove(childID)
+			// info(childUIDs.size+ " children left")
+			if (childUIDs.size <= 0) {
+				in(1000) [
+					info("No more child " + agentPath + " agent kill himself")
+					killMe
+				]
+			}
+		}
+	}
+
+}

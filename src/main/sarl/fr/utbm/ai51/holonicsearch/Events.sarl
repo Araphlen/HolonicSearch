@@ -1,0 +1,24 @@
+package fr.utbm.ai51.holonicsearch
+
+import java.nio.file.Path
+
+event SearchRequest{
+	val predicate : String	
+	val path : String
+	
+	new (pa : String,  pr : String){
+		path = pa
+		predicate = pr
+	}
+}
+
+event SearchFinished
+
+event Destroy
+
+event FileFound{
+	val filePath : String
+	new(s : String){
+		filePath = s
+	}
+}

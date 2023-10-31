@@ -1,0 +1,76 @@
+/** 
+ * 
+ */
+package fr.utbm.ai51.holonicsearch
+
+import io.sarl.api.core.DefaultContextInteractions
+import io.sarl.api.core.Initialize
+import io.sarl.api.core.Lifecycle
+import io.sarl.api.core.Logging
+import io.sarl.api.core.Schedules
+import io.sarl.api.core.ParticipantJoined
+import java.util.Map
+import java.util.concurrent.ConcurrentLinkedQueue
+import io.sarl.lang.core.util.ConcurrentList
+import java.util.UUID
+import java.util.List
+import io.sarl.api.core.ParticipantLeft
+
+/** 
+ * 
+ */
+agent SearchManager {
+	uses Logging, Lifecycle, Schedules, DefaultContextInteractions
+
+	var pathList : ConcurrentLinkedQueue<String>
+	
+	
+	var rootpath : String
+	var predicate : String
+	
+	on Initialize {
+		// Event trigger before the agent begins to live or to be used.
+		// You should put all the initialization statements in this block of code.
+		info("SearchAgent Manager was started.")
+		loggingName = "Search Manager"
+
+		info(occurrence.parameters.get(0) as String)
+		
+		rootpath = occurrence.parameters.get(0) as String
+		predicate = occurrence.parameters.get(1) as String
+		pathList = new ConcurrentLinkedQueue<String>();
+
+		
+		//check if the search agent is already here 
+		if (defaultSpace.numberOfStrongParticipants == 2) {
+			info("Start Research")
+			emit(new SearchRequest(rootpath ,predicate))
+			
+		}
+	}
+
+	on ParticipantJoined {
+		info("Root Search agent joined")
+		// check if the search agent is already here
+		if (defaultSpace.numberOfStrongParticipants ==2) {
+//			emit(new SearchRequest(rootpath, predicate))[it == occurrence.source]
+
+		}
+	}
+	
+	on FileFound{
+		pathList.add(occurrence.filePath)
+	}
+	
+	on ParticipantLeft{
+		if(defaultSpace.numberOfStrongParticipants < 2){
+			info(" \n \nList of all paths found :")
+			for(path : pathList){
+				info(path)
+			}
+			
+			info("Manager kill himself")
+			killMe
+		}
+	}
+}
